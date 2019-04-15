@@ -1,0 +1,47 @@
+---
+title: "glassdoor_reviews"
+author: "Andrea Lianto"
+date: "15 April 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load libraries
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+```
+
+# 1. Data Preparation
+
+## 1.1 Load Data
+
+```{r}
+# List of companies
+companies <- c("euromonitor", 
+               "gfk", 
+               "kantar_worldpanel", 
+               "millward_brown", 
+               "mintel", 
+               "nielsen",
+               "tns_global")
+
+# List of files
+review_files <- paste0("glassdoor_", companies, ".csv")
+
+# Create main data frame for all reviews
+reviews <- read.csv(review_files[1]) %>% mutate(company = companies[1])
+
+# Loop through all the files and bind to main data frame
+for (i in 2:length(review_files)){
+    df <- read.csv(review_files[i]) %>% mutate(company = companies[i])
+    reviews <- rbind(reviews, df)
+}
+```
+
+```{r}
+
+```
+
