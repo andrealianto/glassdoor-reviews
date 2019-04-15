@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Load libraries
 library(tidyverse)
+library(tidyr)
 library(ggplot2)
 library(lubridate)
 ```
@@ -41,7 +42,78 @@ for (i in 2:length(review_files)){
 }
 ```
 
-```{r}
+## 1.2 Data Cleaning
 
+```{r}
+reviews[reviews == "null" | reviews == ""] <- NA
+
+reviews <- reviews %>% 
+    arrange(X...web.scraper.order) %>% 
+    
+    # Remove irrelevant columns
+    select(-c(X...web.scraper.order, web.scraper.start.url, pagination, pagination.href)) %>% 
+    
+    # Remove duplicate rows
+    distinct() %>%
+    
+    # Tidy up score categories
+    rename(score_overall = score) %>% 
+    mutate(subrating_name = case_when(
+        grepl("Culture", subrating_name) ~ "score_culture_and_values",
+        grepl("Career", subrating_name) ~ "score_career_opp",
+        grepl("Balance", subrating_name) ~ "score_work_life_balance",
+        grepl("Benefits", subrating_name) ~ "score_comp_and_benefits",
+        TRUE ~ "score_senior_mgmt"
+    )) %>% 
+    
+    # Create separate columns for each score category
+    spread(subrating_name, subrating_score) %>% 
+
+    # Clean date and reviewer
+    mutate(date = as.Date(date, "%b %d, %Y"),
+           reviewer = gsub("Employee", "", reviewer)) %>% 
+    
+    # Extract employment status and role from reviewer column
+    separate(reviewer, c("current_or_former", "role"), sep = "-", extra = "merge") %>% 
+    
+    # Extract city and country from country column
+    separate(country, c("city", "country"), sep = "\\(", extra = "merge") %>% 
+    
+    # Extract employment status and length from employment_length column
+    separate(employment_length, c("employment_status", "employment_length"), sep = "\\(", extra = "merge") %>% 
+    
+    # Tidy up levels
+    mutate(country = substr(country, 1, nchar(country)-1),
+           country = ifelse(grepl("singapore", tolower(city)), "Singapore", country),
+           recommend = case_when(
+               grepl("Doesn't", recommend) ~ "No",
+               grepl("Recommends", recommend) ~ "Yes"
+           ),
+           outlook = case_when(
+               grepl("Positive", outlook) ~ "Positive",
+               grepl("Negative", outlook) ~ "Negative",
+               grepl("Neutral", outlook) ~ "Neutral"
+           ),
+           approve_ceo = case_when(
+               grepl("No opinion", approve_ceo) ~ "Neutral",
+               grepl("Disapproves", approve_ceo) ~ "No",
+               grepl("Approves", approve_ceo) ~ "Yes"
+           ),
+           employment_length = substr(employment_length, 1, nchar(employment_length)-1),
+           employment_status = case_when(
+               grepl("full-time", tolower(employment_status)) ~ "Full-time",
+               grepl("part-time", tolower(employment_status)) ~ "Part-time",
+               grepl("temporary", tolower(employment_status)) ~ "Temporary",
+               grepl("contract", tolower(employment_status)) ~ "Contract",
+               grepl("intern", tolower(employment_status)) ~ "Intern"
+           )
+    ) %>% 
+    
+    # Reorder columns
+    select(date, company, country, city, role, current_or_former, 
+           employment_status, employment_length, recommend, outlook, approve_ceo,
+           score_overall, score_career_opp:score_work_life_balance, everything())
+
+head(reviews)
 ```
 
