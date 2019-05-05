@@ -48,10 +48,10 @@ for (i in 2:length(review_files)){
 reviews[reviews == "null" | reviews == ""] <- NA
 
 reviews <- reviews %>% 
-    arrange(X...web.scraper.order) %>% 
+    arrange(web.scraper.order) %>% 
     
     # Remove irrelevant columns
-    select(-c(X...web.scraper.order, web.scraper.start.url, pagination, pagination.href)) %>% 
+    select(-c(web.scraper.order, web.scraper.start.url, pagination, pagination.href)) %>% 
     
     # Remove duplicate rows
     distinct() %>%
@@ -106,6 +106,15 @@ reviews <- reviews %>%
                grepl("temporary", tolower(employment_status)) ~ "Temporary",
                grepl("contract", tolower(employment_status)) ~ "Contract",
                grepl("intern", tolower(employment_status)) ~ "Intern"
+           ),
+           company = case_when(
+               grepl("euromonitor", company) ~ "Euromonitor",
+               grepl("gfk", company) ~ "GfK", 
+               grepl("kantar_worldpanel", company) ~ "Kantar Worldpanel", 
+               grepl("millward_brown", company) ~ "Millward Brown", 
+               grepl("mintel", company) ~ "Mintel", 
+               grepl("nielsen", company) ~ "Nielsen",
+               grepl("tns_global", company) ~ "TNS Global"
            )
     ) %>% 
     
@@ -115,5 +124,17 @@ reviews <- reviews %>%
            score_overall, score_career_opp:score_work_life_balance, everything())
 
 head(reviews)
+write.csv(reviews, "reviews_190428.csv")
+```
+
+```{r}
+reviews %>% 
+    group_by(year = year(date), company) %>% 
+    summarise(score = mean(score_overall, na.rm = TRUE)) %>% 
+    arrange(company) %>% 
+    filter(!is.na(year)) %>% 
+    ggplot(aes(x = year, y = score, color = company)) +
+        geom_point()
+
 ```
 
