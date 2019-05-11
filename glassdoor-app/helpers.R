@@ -65,9 +65,9 @@ plot_rating_trend <- function(input_data, rating){
         theme_minimal() +
         theme(plot.title = element_text(size = 20, face = "bold", color = "dimgrey"),
               axis.text = element_text(size = 14, color = "dimgray"),
-              axis.title = element_text(size = 16, color = "dimgray"),
-              legend.text = element_text(size = 16, color = "dimgray"),
-              legend.title = element_text(size = 16, color = "dimgray", face = "bold"),
+              axis.title = element_text(size = 14, color = "dimgray"),
+              legend.text = element_text(size = 14, color = "dimgray"),
+              legend.title = element_text(size = 14, color = "dimgray", face = "bold"),
               legend.background = element_rect(fill = "white", colour = "grey"),
               legend.justification = c(1,1),
               legend.position = c(0.97,0.98))
