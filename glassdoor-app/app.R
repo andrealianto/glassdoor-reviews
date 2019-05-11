@@ -1,8 +1,10 @@
 library(shiny)
-library(DT)
 library(tidyverse)
 library(scales)
 library(lubridate)
+library(tidyr)
+library(tidytext)
+library(shinythemes)
 
 source("helpers.R")
 reviews <- read.csv("data/reviews_190428.csv")
@@ -19,7 +21,7 @@ countries <- c("All", levels(reviews$country))
 
 # Define UI for app
 
-ui <- navbarPage(
+ui <- navbarPage(theme = shinytheme("cosmo"),
     "Glassdoor Reviews",
     tabPanel("Rating Distribution",
         sidebarLayout(
@@ -137,11 +139,77 @@ ui <- navbarPage(
             )
         )
     ),
-    tabPanel("Pros and Cons"),
-    tabPanel("Data",
-        DT::dataTableOutput("t3_review_table")
+    tabPanel("Pros and Cons",
+         sidebarLayout(
+             # Sidebar Panel for selecting inputs
+             sidebarPanel(
+                 helpText("Compare pros and cons of two companies."),
+                 
+                 # Dropdown menus: Choose company
+                 selectInput("t3_company1",
+                             label = "Select company #1",
+                             choices = companies,
+                             selected = selected1),
+                 
+                 selectInput("t3_company2",
+                             label = "Select company #2",
+                             choices = companies,
+                             selected = selected2)
+                 
+             ),
+             
+             # Main Panel for displaying outputs
+             mainPanel(
+                 fixedRow(
+                     column(6,
+                            h3(textOutput("t3_company1"), align = "center"),
+                            h5(textOutput("t3_num_reviews_1"), 
+                               align = "center", style = "color:grey; font-weight:normal"),
+                            plotOutput("t3_pros_1"),
+                            br(),
+                            plotOutput("t3_cons_1"),
+                            br(),
+                            plotOutput("t3_advice_1")
+                     ),
+                     column(6,
+                            h3(textOutput("t3_company2"), align = "center"),
+                            h5(textOutput("t3_num_reviews_2"), 
+                               align = "center", style = "color:grey; font-weight:normal"),
+                            plotOutput("t3_pros_2"),
+                            br(),
+                            plotOutput("t3_cons_2"),
+                            br(),
+                            plotOutput("t3_advice_2")
+                     )
+                 )
+             )
+         )
     ),
-    tabPanel("Credits")
+    tabPanel("About",
+        fluidRow(
+            column(7,
+                   h1(strong("About")),
+                   
+                   p("This Shiny app is for comparing Glassdoor reviews of two market research companies"),
+                   p("The dataset is scraped from",
+                     a("Glassdoor.com", href = "https://www.glassdoor.sg/index.htm"), 
+                     ", and contains 6,414 reviews for 7 companies  from June 2008 to March 2019."),
+                   
+                   p("Access the full project ",
+                      a("here", href = "https://github.com/andreamarsha/glassdoor-reviews"), "."),
+                   
+                   br(),
+                   br(),
+                   
+                   h4(strong("Credits")),
+                   p("1. Data source: ", a("Glassdoor", href = "https://www.glassdoor.sg/index.htm")),
+                   p("2. Webscraping tool: ", a("Webscraper.io", href = "https://www.webscraper.io/"))
+                   
+                   
+            )
+        )
+  
+    )
 )
 
 
@@ -256,28 +324,287 @@ server <- function(input, output) ({
     })
     
     output$t2_trend_all <- renderPlot({
-        plot_rating_trend(datainput(), "avg_overall")}, height = 600)
+        plot_rating_trend(datainput(), "avg_overall")})
     
     output$t2_trend_career <- renderPlot({
-        plot_rating_trend(datainput(), "avg_career")}, height = 600)
+        plot_rating_trend(datainput(), "avg_career")})
     
     output$t2_trend_comp <- renderPlot({
-        plot_rating_trend(datainput(), "avg_comp")}, height = 600)
+        plot_rating_trend(datainput(), "avg_comp")})
     
     output$t2_trend_culture <- renderPlot({
-        plot_rating_trend(datainput(), "avg_culture")}, height = 600)
+        plot_rating_trend(datainput(), "avg_culture")})
     
     output$t2_trend_mgmt <- renderPlot({
-        plot_rating_trend(datainput(), "avg_mgmt")}, height = 600)
+        plot_rating_trend(datainput(), "avg_mgmt")})
     
     output$t2_trend_balance <- renderPlot({
-        plot_rating_trend(datainput(), "avg_balance")}, height = 600)
+        plot_rating_trend(datainput(), "avg_balance")})
     
     
     ############################################################################
-    # TAB 3: Data
-    output$t3_review_table <- DT::renderDataTable({
-        DT::datatable(data1()[,c(2:5)])
+    # TAB 3: Pros and Cons Analysis
+    
+    data_text1 <- reactive({
+        reviews %>% 
+            dplyr::filter(company == input$t3_company1) %>% 
+            select(X, pros, cons, advice_to_management) %>% 
+            mutate(pros = as.character(pros),
+                   cons = as.character(cons),
+                   advice_to_management = as.character(advice_to_management)) 
+            
+    })
+    
+    data_text2 <- reactive({
+        reviews %>% 
+            dplyr::filter(company == input$t3_company2) %>% 
+            select(X, pros, cons, advice_to_management) %>% 
+            mutate(pros = as.character(pros),
+                   cons = as.character(cons),
+                   advice_to_management = as.character(advice_to_management))
+    })
+    
+    data_pro1 <- reactive({
+        data_text1() %>% 
+            select(X, pros) %>% 
+            
+            # Break text into bigrams
+            unnest_tokens(bigram, pros, token = "ngrams", n = 2, drop = FALSE) %>%
+            separate(bigram, c("word1", "word2"), sep = " ") %>% 
+            
+            # Remove bigrams containing stop words
+            filter(!word1 %in% stop_words$word & !is.na(word1)) %>%
+            filter(str_detect(word1, "[^\\d]")) %>%
+            filter(!word2 %in% stop_words$word & !is.na(word2)) %>%
+            filter(str_detect(word1, "[^\\d]")) %>%
+            
+            unite(bigram, word1, word2, sep = " ") %>%
+            
+            count(bigram, sort = TRUE) %>%
+            
+            head(25) %>%
+            mutate(bigram = reorder(bigram, n))
+    })
+    
+    data_pro2 <- reactive({
+        data_text2() %>% 
+            select(X, pros) %>% 
+            
+            # Break text into bigrams
+            unnest_tokens(bigram, pros, token = "ngrams", n = 2, drop = FALSE) %>%
+            separate(bigram, c("word1", "word2"), sep = " ") %>% 
+            
+            # Remove bigrams containing stop words
+            filter(!word1 %in% stop_words$word & !is.na(word1)) %>%
+            filter(str_detect(word1, "[^\\d]")) %>%
+            filter(!word2 %in% stop_words$word & !is.na(word2)) %>%
+            filter(str_detect(word1, "[^\\d]")) %>%
+            
+            unite(bigram, word1, word2, sep = " ") %>%
+            
+            count(bigram, sort = TRUE) %>%
+            
+            head(25) %>%
+            mutate(bigram = reorder(bigram, n))
+    })
+    
+    data_cons1 <- reactive({
+        data_text1() %>% 
+            select(X, cons) %>% 
+            
+            # Break text into bigrams
+            unnest_tokens(bigram, cons, token = "ngrams", n = 2, drop = FALSE) %>%
+            separate(bigram, c("word1", "word2"), sep = " ") %>% 
+            
+            # Remove bigrams containing stop words
+            filter(!word1 %in% stop_words$word & !is.na(word1)) %>%
+            filter(str_detect(word1, "[^\\d]")) %>%
+            filter(!word2 %in% stop_words$word & !is.na(word2)) %>%
+            filter(str_detect(word1, "[^\\d]")) %>%
+            
+            unite(bigram, word1, word2, sep = " ") %>%
+            
+            count(bigram, sort = TRUE) %>%
+            
+            head(25) %>%
+            mutate(bigram = reorder(bigram, n))
+    })
+    
+    data_cons2 <- reactive({
+        data_text2() %>% 
+            select(X, cons) %>% 
+            
+            # Break text into bigrams
+            unnest_tokens(bigram, cons, token = "ngrams", n = 2, drop = FALSE) %>%
+            separate(bigram, c("word1", "word2"), sep = " ") %>% 
+            
+            # Remove bigrams containing stop words
+            filter(!word1 %in% stop_words$word & !is.na(word1)) %>%
+            filter(str_detect(word1, "[^\\d]")) %>%
+            filter(!word2 %in% stop_words$word & !is.na(word2)) %>%
+            filter(str_detect(word1, "[^\\d]")) %>%
+            
+            unite(bigram, word1, word2, sep = " ") %>%
+            
+            count(bigram, sort = TRUE) %>%
+            
+            head(25) %>%
+            mutate(bigram = reorder(bigram, n))
+    })
+    
+    data_advice1 <- reactive({
+        data_text1() %>% 
+            select(X, advice_to_management) %>% 
+            
+            # Break text into bigrams
+            unnest_tokens(bigram, advice_to_management, token = "ngrams", n = 2, drop = FALSE) %>%
+            separate(bigram, c("word1", "word2"), sep = " ") %>% 
+            
+            # Remove bigrams containing stop words
+            filter(!word1 %in% stop_words$word & !is.na(word1)) %>%
+            filter(str_detect(word1, "[^\\d]")) %>%
+            filter(!word2 %in% stop_words$word & !is.na(word2)) %>%
+            filter(str_detect(word1, "[^\\d]")) %>%
+            
+            unite(bigram, word1, word2, sep = " ") %>%
+            
+            count(bigram, sort = TRUE) %>%
+            
+            head(25) %>%
+            mutate(bigram = reorder(bigram, n))
+    })
+    
+    data_advice2 <- reactive({
+        data_text2() %>% 
+            select(X, advice_to_management) %>% 
+            
+            # Break text into bigrams
+            unnest_tokens(bigram, advice_to_management, token = "ngrams", n = 2, drop = FALSE) %>%
+            separate(bigram, c("word1", "word2"), sep = " ") %>% 
+            
+            # Remove bigrams containing stop words
+            filter(!word1 %in% stop_words$word & !is.na(word1)) %>%
+            filter(str_detect(word1, "[^\\d]")) %>%
+            filter(!word2 %in% stop_words$word & !is.na(word2)) %>%
+            filter(str_detect(word1, "[^\\d]")) %>%
+            
+            unite(bigram, word1, word2, sep = " ") %>%
+            
+            count(bigram, sort = TRUE) %>%
+            
+            head(25) %>%
+            mutate(bigram = reorder(bigram, n))
+    })
+    
+    
+    ### Name of selected companies
+    output$t3_company1 <- renderText({input$t3_company1})
+    output$t3_company2 <- renderText({input$t3_company2})
+    
+    
+    ### Number of reviews
+    output$t3_num_reviews_1 <- renderText({paste("Number of reviews =", nrow(data_text1()))})
+    output$t3_num_reviews_2 <- renderText({paste("Number of reviews =", nrow(data_text2()))})
+    
+    
+    ### 1. Pros
+    output$t3_pros_1 <- renderPlot({
+        data_pro1() %>%
+            # Plot horizontal bar graph for word frequency
+            ggplot(aes(bigram, n)) +
+                geom_col(fill = "#67a9cf") +
+                coord_flip() +
+                labs(title = "Top 25 Likes") +
+                theme_minimal() +
+                theme(plot.title = element_text(size = 16, face = "bold", color = "dimgrey"),
+                      plot.subtitle = element_text(size = 12, color = "dimgrey"),
+                      axis.title.x = element_blank(),
+                      axis.title.y = element_blank(),
+                      axis.title = element_text(size = 12, color = "dimgray"),
+                      axis.text = element_text(size = 12, color = "dimgray"))
+    })
+    
+    output$t3_pros_2 <- renderPlot({
+        data_pro2() %>%
+            # Plot horizontal bar graph for word frequency
+            ggplot(aes(bigram, n)) +
+                geom_col(fill = "#67a9cf") +
+                coord_flip() +
+                labs(title = "Top 25 Likes") +
+                theme_minimal() +
+                theme(plot.title = element_text(size = 16, face = "bold", color = "dimgrey"),
+                      plot.subtitle = element_text(size = 12, color = "dimgrey"),
+                      axis.title.x = element_blank(),
+                      axis.title.y = element_blank(),
+                      axis.title = element_text(size = 12, color = "dimgray"),
+                      axis.text = element_text(size = 12, color = "dimgray"))
+    })
+    
+    
+    ### 2. Cons
+    output$t3_cons_1 <- renderPlot({
+        data_cons1() %>%
+            # Plot horizontal bar graph for word frequency
+            ggplot(aes(bigram, n)) +
+                geom_col(fill = "#ef8a62") +
+                coord_flip() +
+                labs(title = "Top 25 Complaints") +
+                theme_minimal() +
+                theme(plot.title = element_text(size = 16, face = "bold", color = "dimgrey"),
+                      plot.subtitle = element_text(size = 12, color = "dimgrey"),
+                      axis.title.x = element_blank(),
+                      axis.title.y = element_blank(),
+                      axis.title = element_text(size = 12, color = "dimgray"),
+                      axis.text = element_text(size = 12, color = "dimgray"))
+    })
+    
+    output$t3_cons_2 <- renderPlot({
+        data_cons2() %>%
+            # Plot horizontal bar graph for word frequency
+            ggplot(aes(bigram, n)) +
+                geom_col(fill = "#ef8a62") +
+                coord_flip() +
+                labs(title = "Top 25 Complaints") +
+                theme_minimal() +
+                theme(plot.title = element_text(size = 16, face = "bold", color = "dimgrey"),
+                      plot.subtitle = element_text(size = 12, color = "dimgrey"),
+                      axis.title.x = element_blank(),
+                      axis.title.y = element_blank(),
+                      axis.title = element_text(size = 12, color = "dimgray"),
+                      axis.text = element_text(size = 12, color = "dimgray"))
+    })
+    
+    ### 3. Advice to Management
+    output$t3_advice_1 <- renderPlot({
+        data_advice1() %>%
+            # Plot horizontal bar graph for word frequency
+            ggplot(aes(bigram, n)) +
+                geom_col(fill = "#969696") +
+                coord_flip() +
+                labs(title = "Top 25 Advice") +
+                theme_minimal() +
+                theme(plot.title = element_text(size = 16, face = "bold", color = "dimgrey"),
+                      plot.subtitle = element_text(size = 12, color = "dimgrey"),
+                      axis.title.x = element_blank(),
+                      axis.title.y = element_blank(),
+                      axis.title = element_text(size = 12, color = "dimgray"),
+                      axis.text = element_text(size = 12, color = "dimgray"))
+    })
+    
+    output$t3_advice_2 <- renderPlot({
+        data_advice2() %>%
+            # Plot horizontal bar graph for word frequency
+            ggplot(aes(bigram, n)) +
+                geom_col(fill = "#969696") +
+                coord_flip() +
+                labs(title = "Top 25 Advice") +
+                theme_minimal() +
+                theme(plot.title = element_text(size = 16, face = "bold", color = "dimgrey"),
+                      plot.subtitle = element_text(size = 12, color = "dimgrey"),
+                      axis.title.x =  element_blank(),
+                      axis.title.y =  element_blank(),
+                      axis.title = element_text(size = 12, color = "dimgray"),
+                      axis.text = element_text(size = 12, color = "dimgray"))
     })
 
 })
